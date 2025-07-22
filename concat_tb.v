@@ -2,36 +2,39 @@
 
 module concat_tb;
 
-    parameter WIDTH = 8;
-    
-    reg  [WIDTH-1:0] feature;
-    reg  [WIDTH-1:0] context2;
-    wire [2*WIDTH-1:0] concat_out;
+    parameter FEATURE_WIDTH = 128;
+    parameter CONTEXT_WIDTH = 384;
+    parameter TOTAL_WIDTH = FEATURE_WIDTH + CONTEXT_WIDTH;
 
-    // Instantiate the module
-    concat #(WIDTH) uut (
+    reg  [FEATURE_WIDTH-1:0] feature;
+    reg  [CONTEXT_WIDTH-1:0] context2;
+    wire [TOTAL_WIDTH-1:0] concat_out;
+
+    // Instantiate the concat module
+    concat #(FEATURE_WIDTH, CONTEXT_WIDTH) uut (
         .feature(feature),
         .context2(context2),
         .concat_out(concat_out)
     );
 
     initial begin
-        $display("Time\tfeature\t\tcontext2\tconcat_out");
-        $monitor("%0t\t%b\t%b\t%b", $time, feature, context2, concat_out);
+        $display("Time\t\tFEATURE\t\t\t\t\t\t\t\t\t\tCONTEXT\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\tCONCAT_OUT");
+        $monitor("%0t\t%032x\t%096x\t%0x", 
+                 $time, feature, context2, concat_out);
 
         // Test case 1
-        feature  = 8'b10101010;
-        context2 = 8'b11001100;
+        feature  = 128'h0123456789ABCDEF0123456789ABCDEF;
+        context2 = 384'hFEDCBA9876543210FEDCBA9876543210FEDCBA9876543210FEDCBA9876543210;
         #10;
 
         // Test case 2
-        feature  = 8'b00001111;
-        context2 = 8'b11110000;
+        feature  = 128'hFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
+        context2 = 384'h0000000000000000000000000000000000000000000000000000000000000000;
         #10;
 
         // Test case 3
-        feature  = 8'b11111111;
-        context2 = 8'b00000000;
+        feature  = 128'h00000000000000000000000000000000;
+        context2 = 384'hFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
         #10;
 
         $finish;
