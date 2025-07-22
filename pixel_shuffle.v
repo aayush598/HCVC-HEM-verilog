@@ -1,40 +1,58 @@
-module pixel_shuffle (
+module pixel_shuffle #(
+    parameter C = 1,           // Output channels
+    parameter R = 2,           // Upscale factor
+    parameter H = 2,           // Input height
+    parameter W = 2,           // Input width
+    parameter DATA_WIDTH = 8   // Data bit width
+)(
     input clk,
     input rst,
     input start,
-    input  [127:0] in_data_flat,
+    input  [(C*R*R*H*W*DATA_WIDTH)-1:0] in_data_flat,
     output reg done,
-    output reg [127:0] out_data_flat
+    output reg [(C*(H*R)*(W*R)*DATA_WIDTH)-1:0] out_data_flat
 );
 
-    reg [7:0] in_data [0:15];
-    reg [7:0] out_data [0:15];
-    integer i, h, w;
+    localparam IN_CHANNELS = C * R * R;
+    localparam IN_PIXELS   = IN_CHANNELS * H * W;
+    localparam OUT_PIXELS  = C * (H * R) * (W * R);
 
-    // Unflatten input data at every clock
+    reg [DATA_WIDTH-1:0] in_data [0:IN_PIXELS-1];
+    reg [DATA_WIDTH-1:0] out_data[0:OUT_PIXELS-1];
+
+    integer i, c, h, w, r1, r2;
+
+    // Unflatten input
+    always @(*) begin
+        for (i = 0; i < IN_PIXELS; i = i + 1) begin
+            in_data[i] = in_data_flat[i*DATA_WIDTH +: DATA_WIDTH];
+        end
+    end
+
+    // Main pixel shuffle logic
     always @(posedge clk or posedge rst) begin
         if (rst) begin
             done <= 0;
+            out_data_flat <= 0;
         end else if (start) begin
-            // Step 1: Unpack flat input into array
-            for (i = 0; i < 16; i = i + 1) begin
-                in_data[i] = in_data_flat[i*8 +: 8];
-            end
-
-            // Step 2: Pixel shuffle for r = 2
-            for (h = 0; h < 2; h = h + 1) begin
-                for (w = 0; w < 2; w = w + 1) begin
-                    out_data[(h*2 + 0)*4 + (w*2 + 0)] = in_data[0*4 + h*2 + w]; // channel 0
-                    out_data[(h*2 + 0)*4 + (w*2 + 1)] = in_data[1*4 + h*2 + w]; // channel 1
-                    out_data[(h*2 + 1)*4 + (w*2 + 0)] = in_data[2*4 + h*2 + w]; // channel 2
-                    out_data[(h*2 + 1)*4 + (w*2 + 1)] = in_data[3*4 + h*2 + w]; // channel 3
+            for (c = 0; c < C; c = c + 1) begin
+                for (h = 0; h < H; h = h + 1) begin
+                    for (w = 0; w < W; w = w + 1) begin
+                        for (r1 = 0; r1 < R; r1 = r1 + 1) begin
+                            for (r2 = 0; r2 < R; r2 = r2 + 1) begin
+                                // Input index
+                                i = (((c*R*R + r1*R + r2)*H + h)*W + w);
+                                // Output index
+                                out_data[((c*(H*R) + (h*R + r1))*(W*R) + (w*R + r2))] = in_data[i];
+                            end
+                        end
+                    end
                 end
             end
 
-            // Step 3: Pack output array into flat
-            out_data_flat = 128'd0;
-            for (i = 0; i < 16; i = i + 1) begin
-                out_data_flat[i*8 +: 8] = out_data[i];
+            // Flatten output
+            for (i = 0; i < OUT_PIXELS; i = i + 1) begin
+                out_data_flat[i*DATA_WIDTH +: DATA_WIDTH] <= out_data[i];
             end
 
             done <= 1;
