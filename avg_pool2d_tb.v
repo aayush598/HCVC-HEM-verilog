@@ -7,14 +7,15 @@ module avg_pool2d_tb;
     reg [127:0] data_in_flat;
     wire [31:0] data_out_flat;
 
-    avg_pool2d uut (
+    avg_pool2d #(
+        .IN_SIZE(4),
+        .BIT_WIDTH(8)
+    ) uut (
         .clk(clk),
         .rst(rst),
         .data_in_flat(data_in_flat),
         .data_out_flat(data_out_flat)
     );
-
-    integer i;
 
     initial begin
         clk = 0;
@@ -26,7 +27,7 @@ module avg_pool2d_tb;
         #10;
         rst = 0;
 
-        // Input 4x4 matrix (flattened row-wise):
+        // 4x4 input matrix (row-major order)
         // [  4   8  12  16 ]
         // [ 20  24  28  32 ]
         // [ 36  40  44  48 ]
