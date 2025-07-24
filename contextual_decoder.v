@@ -37,11 +37,11 @@ module contextual_decoder #(
 
     // Internal wires for data flow
     wire [BATCH_SIZE*CHANNEL_N*4*HEIGHT*WIDTH*DATA_WIDTH-1:0] up1_conv_out;
-    wire [BATCH_SIZE*CHANNEL_N*HEIGHT*WIDTH*2*DATA_WIDTH-1:0] up1_out;
-    wire [BATCH_SIZE*CHANNEL_N*4*HEIGHT*WIDTH*2*DATA_WIDTH-1:0] up2_conv_out;
-    wire [BATCH_SIZE*CHANNEL_N*HEIGHT*WIDTH*4*DATA_WIDTH-1:0] up2_out;
-    wire [BATCH_SIZE*CHANNEL_N*2*HEIGHT*WIDTH*4*DATA_WIDTH-1:0] concat1_out;
-    wire [BATCH_SIZE*CHANNEL_N*2*HEIGHT*WIDTH*4*DATA_WIDTH-1:0] res1_out;
+    wire [BATCH_SIZE*CHANNEL_N*HEIGHT*WIDTH*4*DATA_WIDTH-1:0] up1_out;
+    wire [BATCH_SIZE*CHANNEL_N*HEIGHT*WIDTH*16*DATA_WIDTH-1:0] up2_conv_out;
+    wire [BATCH_SIZE*CHANNEL_N*HEIGHT*WIDTH*16*DATA_WIDTH-1:0] up2_out;
+    wire [BATCH_SIZE*CHANNEL_N*HEIGHT*WIDTH*32*DATA_WIDTH - 1:0] concat1_out;
+    wire [BATCH_SIZE*CHANNEL_N*HEIGHT*WIDTH*32*DATA_WIDTH - 1:0] res1_out;
     wire [BATCH_SIZE*CHANNEL_N*4*HEIGHT*WIDTH*4*DATA_WIDTH-1:0] up3_conv_out;
     wire [BATCH_SIZE*CHANNEL_N*HEIGHT*WIDTH*8*DATA_WIDTH-1:0] up3_out;
     wire [BATCH_SIZE*CHANNEL_N*2*HEIGHT*WIDTH*8*DATA_WIDTH-1:0] concat2_out;
@@ -122,7 +122,7 @@ module contextual_decoder #(
     
     // CONCAT1: Concatenate up2_out with context3
     concat #(
-        .FEATURE_WIDTH(BATCH_SIZE*CHANNEL_N*HEIGHT*WIDTH*4*DATA_WIDTH),
+        .FEATURE_WIDTH(BATCH_SIZE*CHANNEL_N*HEIGHT*WIDTH*16*DATA_WIDTH),
         .CONTEXT_WIDTH(BATCH_SIZE*CHANNEL_N*HEIGHT*WIDTH*2*DATA_WIDTH)
     ) concat1 (
         .feature(up2_out),

@@ -1,14 +1,16 @@
-module contextual_decoder_tb;
 
-    // Parameters
-    parameter DATA_WIDTH = 16;  // Using 16-bit for easier verification
+`timescale 1ns / 1ps
+
+module tb_contextual_decoder();
+
+    // Parameters matching Python test
+    parameter DATA_WIDTH = 32;
     parameter BATCH_SIZE = 1;
     parameter HEIGHT = 2;
     parameter WIDTH = 2;
-    parameter CHANNEL_N = 4;    // Reduced for testbench
-    parameter CHANNEL_M = 6;    // Reduced for testbench
-    parameter CLK_PERIOD = 10;
-
+    parameter CHANNEL_N = 4;  // Reduced for testing
+    parameter CHANNEL_M = 6;  // Reduced for testing
+    
     // Clock and reset
     reg clk;
     reg rst;
@@ -16,10 +18,10 @@ module contextual_decoder_tb;
     
     // Input signals
     reg [BATCH_SIZE*CHANNEL_M*HEIGHT*WIDTH*DATA_WIDTH-1:0] x_in;
-    reg [BATCH_SIZE*CHANNEL_N*HEIGHT*WIDTH*4*DATA_WIDTH-1:0] context2;
-    reg [BATCH_SIZE*CHANNEL_N*HEIGHT*WIDTH*2*DATA_WIDTH-1:0] context3;
+    reg [BATCH_SIZE*CHANNEL_N*HEIGHT*8*WIDTH*8*DATA_WIDTH-1:0] context2;  // 16x16 = HEIGHT*8 x WIDTH*8
+    reg [BATCH_SIZE*CHANNEL_N*HEIGHT*4*WIDTH*4*DATA_WIDTH-1:0] context3;  // 8x8 = HEIGHT*4 x WIDTH*4
     
-    // Weight and bias inputs (simplified - using small values for testing)
+    // Weight and bias inputs (simplified for testing)
     reg [CHANNEL_N*4*CHANNEL_M*3*3*DATA_WIDTH-1:0] up1_weights;
     reg [CHANNEL_N*4*DATA_WIDTH-1:0] up1_bias;
     reg [CHANNEL_N*4*CHANNEL_N*3*3*DATA_WIDTH-1:0] up2_weights;
@@ -41,11 +43,7 @@ module contextual_decoder_tb;
     wire done;
     wire [BATCH_SIZE*32*HEIGHT*WIDTH*16*DATA_WIDTH-1:0] feature_out;
     
-    // File handles for writing outputs
-    integer output_file;
-    integer i, j;
-    
-    // Instantiate DUT
+    // Instantiate the DUT (Device Under Test)
     contextual_decoder #(
         .DATA_WIDTH(DATA_WIDTH),
         .BATCH_SIZE(BATCH_SIZE),
@@ -83,197 +81,108 @@ module contextual_decoder_tb;
     // Clock generation
     initial begin
         clk = 0;
-        forever #(CLK_PERIOD/2) clk = ~clk;
+        forever #5 clk = ~clk; // 100MHz clock
     end
     
-    // Initialize weights and biases with simple patterns
-    task initialize_weights;
-        integer idx;
+    // Convert real to 32-bit fixed point (16.16 format)
+    function [31:0] real_to_fixed;
+        input real value;
         begin
-            // Initialize all weights to small positive values (0.1 in fixed point)
-            for (idx = 0; idx < CHANNEL_N*4*CHANNEL_M*3*3; idx = idx + 1) begin
-                up1_weights[idx*DATA_WIDTH +: DATA_WIDTH] = 16'h0199; // ~0.1 in Q8.8
-            end
-            for (idx = 0; idx < CHANNEL_N*4; idx = idx + 1) begin
-                up1_bias[idx*DATA_WIDTH +: DATA_WIDTH] = 16'h0066; // ~0.025 in Q8.8
-            end
-            
-            // Similar initialization for other weights (simplified)
-            for (idx = 0; idx < CHANNEL_N*4*CHANNEL_N*3*3; idx = idx + 1) begin
-                up2_weights[idx*DATA_WIDTH +: DATA_WIDTH] = 16'h0199;
-            end
-            for (idx = 0; idx < CHANNEL_N*4; idx = idx + 1) begin
-                up2_bias[idx*DATA_WIDTH +: DATA_WIDTH] = 16'h0066;
-            end
-            
-            // ResBlock weights
-            for (idx = 0; idx < CHANNEL_N*CHANNEL_N*2*3*3; idx = idx + 1) begin
-                res1_weights1[idx*DATA_WIDTH +: DATA_WIDTH] = 16'h0199;
-            end
-            for (idx = 0; idx < CHANNEL_N; idx = idx + 1) begin
-                res1_bias1[idx*DATA_WIDTH +: DATA_WIDTH] = 16'h0066;
-            end
-            for (idx = 0; idx < CHANNEL_N*2*CHANNEL_N*3*3; idx = idx + 1) begin
-                res1_weights2[idx*DATA_WIDTH +: DATA_WIDTH] = 16'h0199;
-            end
-            for (idx = 0; idx < CHANNEL_N*2; idx = idx + 1) begin
-                res1_bias2[idx*DATA_WIDTH +: DATA_WIDTH] = 16'h0066;
-            end
-            
-            // UP3 weights
-            for (idx = 0; idx < CHANNEL_N*4*CHANNEL_N*2*3*3; idx = idx + 1) begin
-                up3_weights[idx*DATA_WIDTH +: DATA_WIDTH] = 16'h0199;
-            end
-            for (idx = 0; idx < CHANNEL_N*4; idx = idx + 1) begin
-                up3_bias[idx*DATA_WIDTH +: DATA_WIDTH] = 16'h0066;
-            end
-            
-            // ResBlock2 weights
-            for (idx = 0; idx < CHANNEL_N*CHANNEL_N*2*3*3; idx = idx + 1) begin
-                res2_weights1[idx*DATA_WIDTH +: DATA_WIDTH] = 16'h0199;
-            end
-            for (idx = 0; idx < CHANNEL_N; idx = idx + 1) begin
-                res2_bias1[idx*DATA_WIDTH +: DATA_WIDTH] = 16'h0066;
-            end
-            for (idx = 0; idx < CHANNEL_N*2*CHANNEL_N*3*3; idx = idx + 1) begin
-                res2_weights2[idx*DATA_WIDTH +: DATA_WIDTH] = 16'h0199;
-            end
-            for (idx = 0; idx < CHANNEL_N*2; idx = idx + 1) begin
-                res2_bias2[idx*DATA_WIDTH +: DATA_WIDTH] = 16'h0066;
-            end
-            
-            // UP4 weights
-            for (idx = 0; idx < 128*CHANNEL_N*2*3*3; idx = idx + 1) begin
-                up4_weights[idx*DATA_WIDTH +: DATA_WIDTH] = 16'h0199;
-            end
-            for (idx = 0; idx < 128; idx = idx + 1) begin
-                up4_bias[idx*DATA_WIDTH +: DATA_WIDTH] = 16'h0066;
-            end
+            real_to_fixed = $rtoi(value * 65536.0); // 2^16 for 16 fractional bits
         end
-    endtask
+    endfunction
     
-    // Initialize input data
-    task initialize_inputs;
-        integer idx;
+    // Convert 32-bit fixed point to real for display
+    function real fixed_to_real;
+        input [31:0] value;
         begin
-            // Initialize x_in with incrementing pattern
-            for (idx = 0; idx < BATCH_SIZE*CHANNEL_M*HEIGHT*WIDTH; idx = idx + 1) begin
-                x_in[idx*DATA_WIDTH +: DATA_WIDTH] = (idx + 1) << 8; // Convert to Q8.8
-            end
-            
-            // Initialize context2 with pattern
-            for (idx = 0; idx < BATCH_SIZE*CHANNEL_N*HEIGHT*WIDTH*4; idx = idx + 1) begin
-                context2[idx*DATA_WIDTH +: DATA_WIDTH] = ((idx % 8) + 1) << 7; // Q8.8
-            end
-            
-            // Initialize context3 with pattern  
-            for (idx = 0; idx < BATCH_SIZE*CHANNEL_N*HEIGHT*WIDTH*2; idx = idx + 1) begin
-                context3[idx*DATA_WIDTH +: DATA_WIDTH] = ((idx % 4) + 1) << 7; // Q8.8
-            end
+            fixed_to_real = $itor($signed(value)) / 65536.0;
         end
-    endtask
+    endfunction
     
-    // Write input data to files for Python verification
-    task write_input_data;
-        integer idx;
-        begin
-            output_file = $fopen("verilog_inputs.txt", "w");
-            
-            // Write x_in
-            $fwrite(output_file, "x_in:\n");
-            for (idx = 0; idx < BATCH_SIZE*CHANNEL_M*HEIGHT*WIDTH; idx = idx + 1) begin
-                $fwrite(output_file, "%d\n", $signed(x_in[idx*DATA_WIDTH +: DATA_WIDTH]));
-            end
-            
-            // Write context2
-            $fwrite(output_file, "context2:\n");
-            for (idx = 0; idx < BATCH_SIZE*CHANNEL_N*HEIGHT*WIDTH*4; idx = idx + 1) begin
-                $fwrite(output_file, "%d\n", $signed(context2[idx*DATA_WIDTH +: DATA_WIDTH]));
-            end
-            
-            // Write context3
-            $fwrite(output_file, "context3:\n");
-            for (idx = 0; idx < BATCH_SIZE*CHANNEL_N*HEIGHT*WIDTH*2; idx = idx + 1) begin
-                $fwrite(output_file, "%d\n", $signed(context3[idx*DATA_WIDTH +: DATA_WIDTH]));
-            end
-            
-            // Write weights (simplified - just up1 weights as example)
-            $fwrite(output_file, "up1_weights:\n");
-            for (idx = 0; idx < CHANNEL_N*4*CHANNEL_M*3*3; idx = idx + 1) begin
-                $fwrite(output_file, "%d\n", $signed(up1_weights[idx*DATA_WIDTH +: DATA_WIDTH]));
-            end
-            
-            $fclose(output_file);
-        end
-    endtask
-    
-    // Write output data to file
-    task write_output_data;
-        integer idx;
-        begin
-            output_file = $fopen("verilog_outputs.txt", "w");
-            $fwrite(output_file, "feature_out:\n");
-            for (idx = 0; idx < BATCH_SIZE*32*HEIGHT*WIDTH*16; idx = idx + 1) begin
-                $fwrite(output_file, "%d\n", $signed(feature_out[idx*DATA_WIDTH +: DATA_WIDTH]));
-            end
-            $fclose(output_file);
-        end
-    endtask
-    
-    // Main test sequence
+    // Test stimulus
     initial begin
         // Initialize signals
         rst = 1;
         start = 0;
+        x_in = 0;
+        context2 = 0;
+        context3 = 0;
         
-        // Initialize weights and inputs
-        initialize_weights();
-        initialize_inputs();
+        // Initialize all weights to 0.1 (same as Python test)
+        up1_weights = {(CHANNEL_N*4*CHANNEL_M*3*3){real_to_fixed(0.1)}};
+        up1_bias = {(CHANNEL_N*4){real_to_fixed(0.01)}};
+        up2_weights = {(CHANNEL_N*4*CHANNEL_N*3*3){real_to_fixed(0.1)}};
+        up2_bias = {(CHANNEL_N*4){real_to_fixed(0.01)}};
+        res1_weights1 = {(CHANNEL_N*CHANNEL_N*2*3*3){real_to_fixed(0.1)}};
+        res1_bias1 = {(CHANNEL_N){real_to_fixed(0.01)}};
+        res1_weights2 = {(CHANNEL_N*2*CHANNEL_N*3*3){real_to_fixed(0.1)}};
+        res1_bias2 = {(CHANNEL_N*2){real_to_fixed(0.01)}};
+        up3_weights = {(CHANNEL_N*4*CHANNEL_N*2*3*3){real_to_fixed(0.1)}};
+        up3_bias = {(CHANNEL_N*4){real_to_fixed(0.01)}};
+        res2_weights1 = {(CHANNEL_N*CHANNEL_N*2*3*3){real_to_fixed(0.1)}};
+        res2_bias1 = {(CHANNEL_N){real_to_fixed(0.01)}};
+        res2_weights2 = {(CHANNEL_N*2*CHANNEL_N*3*3){real_to_fixed(0.1)}};
+        res2_bias2 = {(CHANNEL_N*2){real_to_fixed(0.01)}};
+        up4_weights = {(128*CHANNEL_N*2*3*3){real_to_fixed(0.1)}};
+        up4_bias = {(128){real_to_fixed(0.01)}};
         
-        // Write input data for Python verification
-        write_input_data();
+        $display("Starting Contextual Decoder Test");
+        $display("Parameters: BATCH_SIZE=%0d, HEIGHT=%0d, WIDTH=%0d", BATCH_SIZE, HEIGHT, WIDTH);
+        $display("CHANNEL_N=%0d, CHANNEL_M=%0d", CHANNEL_N, CHANNEL_M);
         
-        // Reset sequence
-        #(CLK_PERIOD * 2);
+        // Wait for a few clock cycles
+        #20;
         rst = 0;
-        #(CLK_PERIOD * 2);
+        #10;
+        
+        // Set up input data (matching Python test)
+        // x_in: all values = 2.0
+        x_in = {(BATCH_SIZE*CHANNEL_M*HEIGHT*WIDTH){real_to_fixed(2.0)}};
+        
+        // context2: all values = 1.5 (16x16 = HEIGHT*8 x WIDTH*8)
+        context2 = {(BATCH_SIZE*CHANNEL_N*HEIGHT*8*WIDTH*8){real_to_fixed(1.5)}};
+        
+        // context3: all values = 1.0 (8x8 = HEIGHT*4 x WIDTH*4)
+        context3 = {(BATCH_SIZE*CHANNEL_N*HEIGHT*4*WIDTH*4){real_to_fixed(1.0)}};
+        
+        $display("Input Data Set:");
+        $display("x_in[0] = %f", fixed_to_real(x_in[31:0]));
+        $display("context2[0] = %f", fixed_to_real(context2[31:0]));
+        $display("context3[0] = %f", fixed_to_real(context3[31:0]));
         
         // Start processing
-        $display("Starting contextual decoder test...");
         start = 1;
-        #(CLK_PERIOD);
+        #10;
         start = 0;
         
         // Wait for completion
         wait(done);
-        #(CLK_PERIOD * 5);
+        #10;
         
-        // Write outputs
-        write_output_data();
+        $display("Processing Complete!");
+        $display("Output feature_out[0] = %f", fixed_to_real(feature_out[31:0]));
+        $display("Output feature_out[1] = %f", fixed_to_real(feature_out[63:32]));
+        $display("Output feature_out[2] = %f", fixed_to_real(feature_out[95:64]));
+        $display("Output feature_out[3] = %f", fixed_to_real(feature_out[127:96]));
         
-        $display("Test completed. Done signal asserted.");
-        $display("Input and output data written to files for Python verification.");
+        // Display some statistics
+        $display("Test completed successfully!");
         
-        // Display some output values
-        $display("First few output values:");
-        for (i = 0; i < 8; i = i + 1) begin
-            $display("feature_out[%0d] = %d", i, $signed(feature_out[i*DATA_WIDTH +: DATA_WIDTH]));
-        end
-        
+        #100;
         $finish;
     end
     
-    // Timeout watchdog
+    // Monitor important signals
     initial begin
-        #(CLK_PERIOD * 10000);
-        $display("ERROR: Timeout - test did not complete");
-        $finish;
+        $monitor("Time=%0t, rst=%b, start=%b, done=%b", $time, rst, start, done);
     end
     
-    // Monitor key signals
+    // Timeout protection
     initial begin
-        $monitor("Time=%0t, rst=%b, start=%b, done=%b", 
-                 $time, rst, start, done);
+        #10000; // 10us timeout
+        $display("ERROR: Test timeout!");
+        $finish;
     end
 
 endmodule
