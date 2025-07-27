@@ -14,6 +14,7 @@ module tb_conv2d;
 
     parameter OUT_HEIGHT = (IN_HEIGHT + (2 * PADDING) - KERNEL_SIZE) / STRIDE + 1;
     parameter OUT_WIDTH  = (IN_WIDTH  + (2 * PADDING) - KERNEL_SIZE) / STRIDE + 1;
+    parameter OUT_SIZE   = BATCH_SIZE * OUT_CHANNELS * OUT_HEIGHT * OUT_WIDTH;
 
     reg clk, rst;
     wire done;
@@ -24,7 +25,8 @@ module tb_conv2d;
     wire [BATCH_SIZE*OUT_CHANNELS*OUT_HEIGHT*OUT_WIDTH*DATA_WIDTH-1:0] output_tensor_flat;
 
     integer i;
-    integer start_time, end_time;
+    integer cycle_count;
+    reg counting;
 
     conv2d #(
         .BATCH_SIZE(BATCH_SIZE),
@@ -46,15 +48,24 @@ module tb_conv2d;
         .done(done)
     );
 
-    // Clock generation
+    // Clock generation: 100 MHz -> 10 ns period
     initial begin
         clk = 0;
-        forever #5 clk = ~clk;  // 10ns clock period
+        forever #5 clk = ~clk;
+    end
+
+    // Cycle counter
+    always @(posedge clk) begin
+        if (counting && !done)
+            cycle_count = cycle_count + 1;
     end
 
     // Test
     initial begin
         rst = 1;
+        counting = 0;
+        cycle_count = 0;
+
         input_tensor_flat = 0;
         weights_flat = 0;
         bias_flat = 0;
@@ -62,33 +73,38 @@ module tb_conv2d;
         #10;
         rst = 0;
 
-        // Initialize input tensor with incremental values
-        for (i = 0; i < BATCH_SIZE*IN_CHANNELS*IN_HEIGHT*IN_WIDTH; i = i + 1)
+        // Initialize input tensor: 0 to 31
+        for (i = 0; i < BATCH_SIZE * IN_CHANNELS * IN_HEIGHT * IN_WIDTH; i = i + 1)
             input_tensor_flat[i*DATA_WIDTH +: DATA_WIDTH] = i;
 
         // Initialize weights to 1
-        for (i = 0; i < OUT_CHANNELS*IN_CHANNELS*KERNEL_SIZE*KERNEL_SIZE; i = i + 1)
+        for (i = 0; i < OUT_CHANNELS * IN_CHANNELS * KERNEL_SIZE * KERNEL_SIZE; i = i + 1)
             weights_flat[i*DATA_WIDTH +: DATA_WIDTH] = 32'd1;
 
-        // Initialize bias to 0
+        // Bias to 0
         for (i = 0; i < OUT_CHANNELS; i = i + 1)
             bias_flat[i*DATA_WIDTH +: DATA_WIDTH] = 32'd0;
 
-        // Record start time
-        start_time = $time;
+        // Wait for 1 cycle and start counting
+        @(posedge clk);
+        counting = 1;
 
-        // Wait until done signal is asserted
+        // Wait until convolution completes
         wait (done);
 
-        // Record end time
-        end_time = $time;
+        counting = 0;
 
         $display("\n=== Convolution Output Tensor ===");
-        for (i = 0; i < BATCH_SIZE*OUT_CHANNELS*OUT_HEIGHT*OUT_WIDTH; i = i + 1) begin
-            $display("output_tensor[%0d] = %0d", i, output_tensor_flat[i*DATA_WIDTH +: DATA_WIDTH]);
+        for (i = 0; i < OUT_SIZE; i = i + 1) begin
+            $display("output_tensor[%0d] = %0d (0x%08h)", 
+                     i, 
+                     output_tensor_flat[i*DATA_WIDTH +: DATA_WIDTH],
+                     output_tensor_flat[i*DATA_WIDTH +: DATA_WIDTH]);
         end
 
-        $display("\n[INFO] Convolution time: %0d ns", end_time - start_time);
+        $display("\n[INFO] Convolution completed in %0d clock cycles.", cycle_count);
+        $display("[INFO] Clock Frequency: 100 MHz");
+        $display("[INFO] Total Time     : %0d ns (%0.2f µs)", cycle_count * 10, cycle_count * 10.0 / 1000.0);
 
         $finish;
     end

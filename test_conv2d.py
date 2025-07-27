@@ -23,11 +23,18 @@ weights = torch.ones((OUT_CHANNELS, IN_CHANNELS, KERNEL_SIZE, KERNEL_SIZE), dtyp
 bias = torch.zeros(OUT_CHANNELS, dtype=torch.float32)
 
 # Measure time
-start = time.time()
+# start = time.time()
 
-output_tensor = F.conv2d(input_tensor, weights, bias, stride=STRIDE, padding=PADDING)
+# output_tensor = F.conv2d(input_tensor, weights, bias, stride=STRIDE, padding=PADDING)
 
-end = time.time()
+# end = time.time()
+
+for i in range(10):
+    start = time.time()
+
+    output_tensor = F.conv2d(input_tensor, weights, bias, stride=STRIDE, padding=PADDING)
+
+    end = time.time()
 
 # Print output
 print("\n=== PyTorch Convolution Output Tensor ===")
