@@ -16,6 +16,7 @@ module tb_conv2d;
     parameter OUT_WIDTH  = (IN_WIDTH  + (2 * PADDING) - KERNEL_SIZE) / STRIDE + 1;
 
     reg clk, rst;
+    wire done;
 
     reg  [BATCH_SIZE*IN_CHANNELS*IN_HEIGHT*IN_WIDTH*DATA_WIDTH-1:0] input_tensor_flat;
     reg  [OUT_CHANNELS*IN_CHANNELS*KERNEL_SIZE*KERNEL_SIZE*DATA_WIDTH-1:0] weights_flat;
@@ -23,6 +24,7 @@ module tb_conv2d;
     wire [BATCH_SIZE*OUT_CHANNELS*OUT_HEIGHT*OUT_WIDTH*DATA_WIDTH-1:0] output_tensor_flat;
 
     integer i;
+    integer start_time, end_time;
 
     conv2d #(
         .BATCH_SIZE(BATCH_SIZE),
@@ -40,7 +42,8 @@ module tb_conv2d;
         .input_tensor_flat(input_tensor_flat),
         .weights_flat(weights_flat),
         .bias_flat(bias_flat),
-        .output_tensor_flat(output_tensor_flat)
+        .output_tensor_flat(output_tensor_flat),
+        .done(done)
     );
 
     // Clock generation
@@ -71,12 +74,21 @@ module tb_conv2d;
         for (i = 0; i < OUT_CHANNELS; i = i + 1)
             bias_flat[i*DATA_WIDTH +: DATA_WIDTH] = 32'd0;
 
-        #100;  // Wait for convolution to complete
+        // Record start time
+        start_time = $time;
+
+        // Wait until done signal is asserted
+        wait (done);
+
+        // Record end time
+        end_time = $time;
 
         $display("\n=== Convolution Output Tensor ===");
         for (i = 0; i < BATCH_SIZE*OUT_CHANNELS*OUT_HEIGHT*OUT_WIDTH; i = i + 1) begin
             $display("output_tensor[%0d] = %0d", i, output_tensor_flat[i*DATA_WIDTH +: DATA_WIDTH]);
         end
+
+        $display("\n[INFO] Convolution time: %0d ns", end_time - start_time);
 
         $finish;
     end
