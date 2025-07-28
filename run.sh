@@ -1,4 +1,4 @@
 clear
 python test_conv2d.py 
-iverilog -o conv2d_test conv2d_pipeline.v conv2d_pipeline_tb.v
-vvp conv2d_test
+iverilog -o out top.v conv2d_memoryoptimization.v conv2d_memoryoptimization_tb.v 
+vvp out
