@@ -76,6 +76,12 @@ module conv2d #(
     // Pipeline registers for memory access
     reg [DATA_WIDTH-1:0] input_data_reg, weight_data_reg, bias_data_reg;
     reg memory_read_done;
+
+    integer j;
+    reg signed [DATA_WIDTH+8-1:0] mac_sum;
+    reg signed [DATA_WIDTH-1:0] input_vals [0:IN_CHANNELS-1];
+    reg signed [DATA_WIDTH-1:0] weight_vals [0:IN_CHANNELS-1];
+
     
     // Address calculation
     always @(*) begin
@@ -187,38 +193,43 @@ module conv2d #(
                 READ_INPUT: begin
                     input_en <= 0;
                     if (input_valid) begin
-                        input_data_reg <= input_data;
-                        input_val <= $signed(input_data);
+                        input_vals[in_ch_idx] <= $signed(input_data);
                     end else begin
-                        input_val <= 0;
+                        input_vals[in_ch_idx] <= 0;
                     end
                     state <= READ_WEIGHT;
                 end
                 
                 READ_WEIGHT: begin
                     weight_en <= 0;
-                    weight_data_reg <= weight_data;
-                    weight_val <= $signed(weight_data);
-                    state <= COMPUTE_CONV;
+                    weight_vals[in_ch_idx] <= $signed(weight_data);
+                    
+                    if (in_ch_idx == IN_CHANNELS - 1) begin
+                        state <= COMPUTE_CONV;
+                    end else begin
+                        in_ch_idx <= in_ch_idx + 1;
+                        state <= SLIDE_WINDOW;
+                    end
                 end
                 
+   
                 COMPUTE_CONV: begin
-                    // Perform convolution computation
-                    accumulator <= accumulator + (input_val * weight_val);
+                    // Unrolled MAC logic for IN_CHANNELS = 2
+                    accumulator <= accumulator +
+                                (input_vals[0] * weight_vals[0]) +
+                                (input_vals[1] * weight_vals[1]);
                     
-                    // Move to next position in sliding window
+                    // Reset in_ch_idx for next kernel position
+                    in_ch_idx <= 0;
+
+                    // Advance kernel
                     if (kernel_col == KERNEL_SIZE - 1) begin
                         kernel_col <= 0;
                         if (kernel_row == KERNEL_SIZE - 1) begin
                             kernel_row <= 0;
-                            if (in_ch_idx == IN_CHANNELS - 1) begin
-                                state <= STORE_RESULT;
-                            end else begin
-                                in_ch_idx <= in_ch_idx + 1;
-                                state <= SLIDE_WINDOW;
-                            end
+                            state <= STORE_RESULT;
                         end else begin
-                            kernel_row <= kernel_row + 1;  
+                            kernel_row <= kernel_row + 1;
                             state <= SLIDE_WINDOW;
                         end
                     end else begin
@@ -226,6 +237,8 @@ module conv2d #(
                         state <= SLIDE_WINDOW;
                     end
                 end
+
+
                 
                 STORE_RESULT: begin
                     // Setup output write
