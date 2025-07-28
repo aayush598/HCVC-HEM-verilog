@@ -29,7 +29,7 @@ bias = torch.zeros(OUT_CHANNELS, dtype=torch.float32)
 
 # end = time.time()
 
-for i in range(10):
+for i in range(30):
     start = time.time()
 
     output_tensor = F.conv2d(input_tensor, weights, bias, stride=STRIDE, padding=PADDING)
