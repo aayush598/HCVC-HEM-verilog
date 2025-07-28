@@ -214,10 +214,12 @@ module conv2d #(
                 
    
                 COMPUTE_CONV: begin
-                    // Unrolled MAC logic for IN_CHANNELS = 2
-                    accumulator <= accumulator +
-                                (input_vals[0] * weight_vals[0]) +
-                                (input_vals[1] * weight_vals[1]);
+                    mac_sum = 0;
+                    for (j = 0; j < IN_CHANNELS; j = j + 1) begin
+                        mac_sum = mac_sum + input_vals[j] * weight_vals[j];
+                    end
+                    accumulator <= accumulator + mac_sum;
+
                     
                     // Reset in_ch_idx for next kernel position
                     in_ch_idx <= 0;
