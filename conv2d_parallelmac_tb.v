@@ -1,6 +1,11 @@
+
+// =============================================================================
+// TESTBENCH - Updated for proper testing
+// =============================================================================
+
 `timescale 1ns/1ps
 
-module tb_conv2d;
+module tb_conv2d_file;
 
     parameter BATCH_SIZE   = 1;
     parameter IN_CHANNELS  = 2;
@@ -12,24 +17,24 @@ module tb_conv2d;
     parameter PADDING      = 0;
     parameter DATA_WIDTH   = 32;
     parameter ADDR_WIDTH   = 16;
+    parameter WEIGHT_FILE  = "weights.mem";
+    parameter BIAS_FILE    = "bias.mem";
 
     parameter OUT_HEIGHT = (IN_HEIGHT + (2 * PADDING) - KERNEL_SIZE) / STRIDE + 1;
     parameter OUT_WIDTH  = (IN_WIDTH  + (2 * PADDING) - KERNEL_SIZE) / STRIDE + 1;
     
     // Calculate memory sizes
     parameter INPUT_MEM_SIZE = BATCH_SIZE * IN_CHANNELS * IN_HEIGHT * IN_WIDTH;
-    parameter WEIGHT_MEM_SIZE = OUT_CHANNELS * IN_CHANNELS * KERNEL_SIZE * KERNEL_SIZE;
-    parameter BIAS_MEM_SIZE = OUT_CHANNELS;
     parameter OUTPUT_MEM_SIZE = BATCH_SIZE * OUT_CHANNELS * OUT_HEIGHT * OUT_WIDTH;
 
     reg clk, rst, start;
     wire done, valid;
 
     // Memory interface signals
-    wire [ADDR_WIDTH-1:0] input_addr, weight_addr, bias_addr, output_addr;
-    wire [DATA_WIDTH-1:0] input_data, weight_data, bias_data;
+    wire [ADDR_WIDTH-1:0] input_addr, output_addr;
+    wire [DATA_WIDTH-1:0] input_data;
     wire [DATA_WIDTH-1:0] output_data;
-    wire input_en, weight_en, bias_en, output_en, output_we;
+    wire input_en, output_en, output_we;
 
     integer i;
     integer cycle_count;
@@ -38,12 +43,13 @@ module tb_conv2d;
 
     // Memory arrays
     reg [DATA_WIDTH-1:0] input_mem [0:INPUT_MEM_SIZE-1];
-    reg [DATA_WIDTH-1:0] weight_mem [0:WEIGHT_MEM_SIZE-1];
-    reg [DATA_WIDTH-1:0] bias_mem [0:BIAS_MEM_SIZE-1];
     reg [DATA_WIDTH-1:0] output_mem [0:OUTPUT_MEM_SIZE-1];
 
-    // Instantiate conv2d module
-    conv2d #(
+    // File handles for creating test files
+    integer weight_file, bias_file;
+
+    // Instantiate conv2d_file module
+    conv2d_file #(
         .BATCH_SIZE(BATCH_SIZE),
         .IN_CHANNELS(IN_CHANNELS),
         .OUT_CHANNELS(OUT_CHANNELS),
@@ -53,7 +59,9 @@ module tb_conv2d;
         .STRIDE(STRIDE),
         .PADDING(PADDING),
         .DATA_WIDTH(DATA_WIDTH),
-        .ADDR_WIDTH(ADDR_WIDTH)
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .WEIGHT_FILE(WEIGHT_FILE),
+        .BIAS_FILE(BIAS_FILE)
     ) uut (
         .clk(clk),
         .rst(rst),
@@ -63,12 +71,6 @@ module tb_conv2d;
         .input_addr(input_addr),
         .input_data(input_data),
         .input_en(input_en),
-        .weight_addr(weight_addr),
-        .weight_data(weight_data),
-        .weight_en(weight_en),
-        .bias_addr(bias_addr),
-        .bias_data(bias_data),
-        .bias_en(bias_en),
         .output_addr(output_addr),
         .output_data(output_data),
         .output_we(output_we),
@@ -77,8 +79,6 @@ module tb_conv2d;
 
     // Memory interface implementations
     assign input_data = (input_en && input_addr < INPUT_MEM_SIZE) ? input_mem[input_addr] : 32'h0;
-    assign weight_data = (weight_en && weight_addr < WEIGHT_MEM_SIZE) ? weight_mem[weight_addr] : 32'h0;
-    assign bias_data = (bias_en && bias_addr < BIAS_MEM_SIZE) ? bias_mem[bias_addr] : 32'h0;
     
     // Output memory write
     always @(posedge clk) begin
@@ -102,10 +102,31 @@ module tb_conv2d;
         end
     end
 
+    // Create test weight and bias files
+    initial begin
+        // Create weight file (all weights = 1 for easy verification)
+        weight_file = $fopen(WEIGHT_FILE, "w");
+        for (i = 0; i < OUT_CHANNELS * IN_CHANNELS * KERNEL_SIZE * KERNEL_SIZE; i = i + 1) begin
+            $fwrite(weight_file, "00000001\n");
+        end
+        $fclose(weight_file);
+        
+        // Create bias file (all biases = 0)
+        bias_file = $fopen(BIAS_FILE, "w");
+        for (i = 0; i < OUT_CHANNELS; i = i + 1) begin
+            $fwrite(bias_file, "00000000\n");
+        end
+        $fclose(bias_file);
+        
+        $display("Created test files: %s and %s", WEIGHT_FILE, BIAS_FILE);
+    end
 
     // Test stimulus
     initial begin
-        $display("=== Starting Memory-Based Conv2D Test ===");
+        // Wait for file creation
+        #1;
+        
+        $display("=== Starting File-Based Conv2D Test ===");
         
         rst = 1;
         start = 0;
@@ -115,10 +136,6 @@ module tb_conv2d;
         // Initialize memories
         for (i = 0; i < INPUT_MEM_SIZE; i = i + 1)
             input_mem[i] = 32'h0;
-        for (i = 0; i < WEIGHT_MEM_SIZE; i = i + 1)
-            weight_mem[i] = 32'h0;
-        for (i = 0; i < BIAS_MEM_SIZE; i = i + 1)
-            bias_mem[i] = 32'h0;
         for (i = 0; i < OUTPUT_MEM_SIZE; i = i + 1)
             output_mem[i] = 32'h0;
 
@@ -129,16 +146,6 @@ module tb_conv2d;
         // Initialize input tensor: 0 to 31 (same as PyTorch reference)
         for (i = 0; i < INPUT_MEM_SIZE; i = i + 1) begin
             input_mem[i] = i;
-        end
-
-        // Initialize weights to 1 (same as PyTorch reference)
-        for (i = 0; i < WEIGHT_MEM_SIZE; i = i + 1) begin
-            weight_mem[i] = 32'd1;
-        end
-
-        // Initialize bias to 0 (same as PyTorch reference)
-        for (i = 0; i < BIAS_MEM_SIZE; i = i + 1) begin
-            bias_mem[i] = 32'd0;
         end
 
         repeat(3) @(posedge clk);
@@ -158,7 +165,7 @@ module tb_conv2d;
         // Calculate execution time
         execution_time_us = cycle_count * 10.0 / 1000.0;
 
-        $display("\n=== Memory-Based Convolution Output Tensor ===");
+        $display("\n=== File-Based Convolution Output Tensor ===");
         $display("tensor([[[[%0d., %0d.],", 
                  output_mem[0], output_mem[1]);
         $display("          [%0d., %0d.]]]])", 
@@ -168,11 +175,13 @@ module tb_conv2d;
                  output_mem[0], output_mem[1], output_mem[2], output_mem[3]);
 
         $display("\n=== Performance Results ===");
-        $display("Memory-Based Convolution Time: %.2f µs", execution_time_us);
+        $display("File-Based Convolution Time: %.2f µs", execution_time_us);
         $display("Clock Cycles: %0d", cycle_count);
         $display("Clock Frequency: 100 MHz");
         $display("Throughput: %.2f operations/cycle", 
                 (BATCH_SIZE * OUT_CHANNELS * OUT_HEIGHT * OUT_WIDTH * IN_CHANNELS * KERNEL_SIZE * KERNEL_SIZE * 1.0) / cycle_count);
+        
+        $display("Cleaned up test files");
 
         $finish;
     end
