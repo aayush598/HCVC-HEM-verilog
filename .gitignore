@@ -3,3 +3,4 @@ top
 *.vvp
 *.vcd
 venv
+conv2d_optimized/conv2d_test
