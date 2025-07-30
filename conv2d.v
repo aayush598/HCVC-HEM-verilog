@@ -39,28 +39,17 @@ module conv2d #(
     reg signed [DATA_WIDTH-1:0] weights [0:WEIGHT_SIZE-1];
     reg signed [DATA_WIDTH-1:0] bias [0:OUT_CHANNELS-1];
     
-// Initialize weights and bias (synthesizable)
+integer w;
 always @(posedge clk) begin
     if (rst) begin
-        // Assign weights
-        weights[0] <= 32'd1;
-        weights[1] <= 32'd1;
-        weights[2] <= 32'd1;
-        weights[3] <= 32'd1;
-        weights[4] <= 32'd1;
-        weights[5] <= 32'd1;
-        weights[6] <= 32'd1;
-        weights[7] <= 32'd1;
-
-        // Extend as needed up to WEIGHT_SIZE-1
-
-        // Assign bias
-        bias[0] <= 32'd0;
-
-        // Extend if OUT_CHANNELS > 1
+        for (w = 0; w < WEIGHT_SIZE; w = w + 1) begin
+            weights[w] <= 8'd1;  // Use 8'd1 for consistency with DATA_WIDTH
+        end
+        for (w = 0; w < OUT_CHANNELS; w = w + 1) begin
+            bias[w] <= 8'd0;
+        end
     end
 end
-
     
     // State machine
     localparam IDLE = 4'b0000;
