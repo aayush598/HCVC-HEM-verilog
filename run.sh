@@ -1,4 +1,4 @@
 clear
 python test_conv2d.py 
-iverilog -o out top.v conv2d_parallelmac.v conv2d_parallelmac_tb.v 
+iverilog -o out conv2d_WBNotInput.v conv2d_WBNotInput_tb.v 
 vvp out
